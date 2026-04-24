@@ -3,36 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>gfx-lab</title>
+  <title>Camera Calibration Lab</title>
 
   <!-- KaTeX -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
-          onload="renderMathInElement(document.body, {
-            delimiters: [
-              {left: '$$', right: '$$', display: true},
-              {left: '$', right: '$', display: false}
-            ],
-            macros: {
-              '\\R': '\\mathbb{R}',
-              '\\vec': '\\mathbf{#1}',
-              '\\mat': '\\mathbf{#1}'
-            }
-          });"></script>
+    onload="renderMathInElement(document.body, {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '$', right: '$', display: false}
+      ],
+      macros: { '\\R': '\\mathbb{R}' }
+    });"></script>
 
-  <!-- Import Maps for Three.js (ESM) -->
+  <!-- Import Maps -->
   <script type="importmap">
   {
     "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/",
+      "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm"
     }
   }
   </script>
 
+  <!-- OpenCV.js WASM -->
+  <script async src="https://docs.opencv.org/4.x/opencv.js"
+    onload="window._cvReady = true; document.getElementById('cv-status').textContent = 'OpenCV.js ✓';"
+    onerror="document.getElementById('cv-status').textContent = 'OpenCV.js 載入失敗';"></script>
+
   <style>
-    /* Nord colour palette */
     :root {
       --nord0:  #2E3440;
       --nord1:  #3B4252;
@@ -55,39 +56,160 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
       background: var(--nord0);
       color: var(--nord4);
-      font-family: 'JetBrains Mono', monospace, sans-serif;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+    }
+
+    /* ── Main 3D world canvas ── */
+    #main {
+      flex: 1;
+      display: block;
+      min-width: 0;
+    }
+
+    /* ── Right panel ── */
+    #panel {
+      width: 660px;
+      flex-shrink: 0;
+      background: var(--nord1);
       display: flex;
       flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
+      overflow-y: auto;
+      border-left: 1px solid var(--nord3);
     }
 
-    canvas { display: block; }
+    /* lil-gui inside panel */
+    #gui-mount .lil-gui {
+      position: relative !important;
+      width: 100% !important;
+    }
+    #gui-mount .lil-gui.root {
+      border-radius: 0;
+      border: none;
+      border-bottom: 1px solid var(--nord3);
+    }
 
-    #info {
+    /* ── Feed container ── */
+    #feed-wrap {
+      position: relative;
+      width: 640px;
+      height: 480px;
+      margin: 8px 10px;
+      flex-shrink: 0;
+      border: 2px solid var(--nord3);
+    }
+
+    #feed, #overlay {
       position: absolute;
-      top: 1rem;
-      left: 1rem;
-      color: var(--nord8);
-      font-size: 0.85rem;
+      top: 0; left: 0;
+      width: 640px;
+      height: 480px;
     }
 
+    #overlay { pointer-events: none; }
+
+    /* feed label */
+    #feed-label {
+      position: absolute;
+      bottom: 4px;
+      left: 6px;
+      color: var(--nord8);
+      font-size: 0.72rem;
+      z-index: 10;
+      text-shadow: 0 0 4px var(--nord0);
+      pointer-events: none;
+    }
+
+    /* ── Status bar ── */
+    #status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 10px;
+      background: var(--nord2);
+      font-size: 0.75rem;
+      border-bottom: 1px solid var(--nord3);
+      flex-shrink: 0;
+    }
+
+    #cv-status { color: var(--nord14); }
+
+    #snap-status { color: var(--nord8); }
+
+    /* ── Result panel ── */
+    #result {
+      padding: 8px 10px 12px;
+      font-size: 0.75rem;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    #result table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 6px;
+    }
+
+    #result th, #result td {
+      padding: 3px 8px;
+      border: 1px solid var(--nord3);
+      text-align: right;
+    }
+
+    #result th {
+      background: var(--nord2);
+      color: var(--nord6);
+      text-align: center;
+    }
+
+    #result td:first-child { text-align: left; color: var(--nord9); }
+
+    .rms-good  { color: var(--nord14); }
+    .rms-warn  { color: var(--nord13); }
+    .rms-bad   { color: var(--nord11); }
+
+    /* ── Info overlay on main canvas ── */
+    #info {
+      position: fixed;
+      top: 8px;
+      left: 10px;
+      color: var(--nord8);
+      font-size: 0.75rem;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
-  <!-- GitHub Ribbon：將 href 替換為你的 repo URL -->
-  <!-- 顏色可換：forkme_right_red_aa0000 / forkme_right_green_007200 / forkme_right_darkblue_121621 -->
-  <a href="https://github.com/YOUR_USERNAME/YOUR_REPO" target="_blank" rel="noopener">
-    <img loading="lazy" decoding="async" width="149" height="149"
-         style="position:fixed;top:0;right:0;border:0;z-index:9999;"
-         src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png"
-         alt="Fork me on GitHub">
-  </a>
+  <canvas id="main"></canvas>
 
-  <div id="info">gfx-lab | Three.js + KaTeX + Nord</div>
-  <canvas id="canvas"></canvas>
+  <div id="panel">
+    <div id="gui-mount"></div>
+
+    <div id="status-bar">
+      <span id="snap-status">快照：0 張 | 就緒</span>
+      <span id="cv-status">OpenCV.js 載入中…</span>
+    </div>
+
+    <div id="feed-wrap">
+      <canvas id="feed" width="640" height="480"></canvas>
+      <canvas id="overlay" width="640" height="480"></canvas>
+      <div id="feed-label">Camera Feed (Virtual Cam)</div>
+    </div>
+
+    <div id="result">
+      <span style="color:var(--nord3)">等待校正… 至少需要 3 張不同角度的快照。</span>
+      <p style="margin-top:6px; color:var(--nord3)">
+        公式：$f_y = \dfrac{H/2}{\tan(FOV/2)}$
+      </p>
+    </div>
+  </div>
+
+  <div id="info">Camera Calibration Lab | Three.js + OpenCV.js</div>
 
   <script type="module" src="./src/main.js"></script>
 </body>
