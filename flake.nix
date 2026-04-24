@@ -13,7 +13,7 @@
       in {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
-            nodePackages.live-server
+            live-server
             just
           ];
           shellHook = ''
