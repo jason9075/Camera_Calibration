@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';
+import { calibrateCamera } from './calib.js';
 
 // ── Board geometry constants ──────────────────────────────────────────────────
 const BOARD_COLS = 9;    // inner corners (horizontal)
@@ -28,6 +29,13 @@ feedRenderer.shadowMap.enabled = true;
 
 const overlayCanvas = document.getElementById('overlay');
 const ctx2d = overlayCanvas.getContext('2d');
+
+// ── Dirty-render flags (declared early — used by syncCam before GUI setup) ────
+let mainDirty = true;
+let feedDirty = true;
+let lastFeedMs = 0;
+const FEED_INTERVAL_MS = 1000 / 15;
+function markDirty() { mainDirty = true; feedDirty = true; }
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
@@ -138,8 +146,6 @@ orbit.dampingFactor = 0.07;
 orbit.target.set(0, 0, 0);
 
 // ── Reprojection error lines (shown in main 3D view) ──────────────────────────
-const errorLines = new THREE.Group();
-scene.add(errorLines);
 
 // ── Project corners → 2D pixel coords ────────────────────────────────────────
 function projectCorners() {
@@ -192,7 +198,7 @@ function drawLiveCorners(pts) {
   ctx2d.fillRect(4, 4, 130, 20);
   ctx2d.fillStyle = '#88C0D0';
   ctx2d.font = '11px monospace';
-  ctx2d.fillText(`snapshots: ${snapshots.length}  ${ok ? '✓ ready' : '✗ out of frame'}`, 8, 18);
+  ctx2d.fillText(`snaps: ${snapshots.length}  ${ok ? '✓ in frame' : '✗ out of frame'}`, 8, 18);
 }
 
 function drawReprojectionOverlay(measured, reprojected) {
@@ -240,10 +246,12 @@ let liveOverlay = true;
 
 // ── UI elements ───────────────────────────────────────────────────────────────
 const snapStatusEl = document.getElementById('snap-status');
-const resultEl = document.getElementById('result');
+const cvStatusEl   = document.getElementById('cv-status');
+const resultEl     = document.getElementById('result');
+cvStatusEl.textContent = "Zhang's method (pure JS)";
 
 function setStatus(msg) {
-  snapStatusEl.textContent = `快照：${snapshots.length} 張 | ${msg}`;
+  snapStatusEl.textContent = `Snapshots: ${snapshots.length} | ${msg}`;
 }
 
 // ── Virtual camera sync ───────────────────────────────────────────────────────
@@ -265,8 +273,8 @@ function syncCam() {
   virtualCam.fov = params.fov;
   virtualCam.aspect = FEED_W / FEED_H;
   virtualCam.updateProjectionMatrix();
-  camHelper.update();
-  liveOverlay = true;   // return to live corner mode when camera moves
+  liveOverlay = true;
+  markDirty();
 }
 syncCam();
 
@@ -274,7 +282,7 @@ syncCam();
 function takeSnapshot() {
   const pts = projectCorners();
   if (!allInFrame(pts)) {
-    setStatus('快照失敗：角點不在畫面內');
+    setStatus('Snapshot failed — corners out of frame');
     return;
   }
   const imgPts = new Float32Array(pts.length * 2);
@@ -286,219 +294,85 @@ function takeSnapshot() {
     imgPts,
     camState: { pos: virtualCam.position.clone(), rot: virtualCam.rotation.clone() },
   });
+
   liveOverlay = true;
-  setStatus(`快照 #${snapshots.length} 已擷取`);
+  markDirty();
+  setStatus(`Snapshot #${snapshots.length} captured`);
 }
 
-// ── OpenCV calibration ────────────────────────────────────────────────────────
+// ── Calibration — pure JS Zhang's method (synchronous, no WASM) ──────────────
 function calibrate() {
-  if (snapshots.length < 3) {
-    setStatus('至少需要 3 張快照');
-    return;
-  }
-  if (typeof cv === 'undefined' || !cv.calibrateCamera) {
-    setStatus('OpenCV.js 尚未就緒，請稍候');
-    return;
-  }
-
-  const N = BOARD_COLS * BOARD_ROWS;
-  const objMats = [];
-  const imgMats = [];
-  const objVec = new cv.MatVector();
-  const imgVec = new cv.MatVector();
-
-  for (const snap of snapshots) {
-    const om = cv.matFromArray(N, 1, cv.CV_32FC3, objPtsFlat);
-    const im = cv.matFromArray(N, 1, cv.CV_32FC2, Array.from(snap.imgPts));
-    objMats.push(om);
-    imgMats.push(im);
-    objVec.push_back(om);
-    imgVec.push_back(im);
-  }
-
-  const K    = new cv.Mat();
-  const dist = new cv.Mat();
-  const rvecs = new cv.MatVector();
-  const tvecs = new cv.MatVector();
+  if (snapshots.length < 3) { setStatus('Need at least 3 snapshots'); return; }
 
   try {
-    const rms = cv.calibrateCamera(
-      objVec, imgVec,
-      new cv.Size(FEED_W, FEED_H),
-      K, dist, rvecs, tvecs
-    );
-
-    const kd = K.data64F;
-    const dd = dist.data64F;
-    const fx = kd[0], fy = kd[4], cx = kd[2], cy = kd[5];
-
-    // Three.js ground truth intrinsics
-    const fovRad = THREE.MathUtils.degToRad(virtualCam.fov);
-    const fyTrue = (FEED_H / 2) / Math.tan(fovRad / 2);
-    const fxTrue = fyTrue;   // square pixels: fx = fy
-
-    const rmsClass = rms < 0.5 ? 'rms-good' : rms < 1.5 ? 'rms-warn' : 'rms-bad';
-
-    resultEl.innerHTML = `
-      <div class="${rmsClass}" style="font-size:0.9rem; font-weight:bold; margin-bottom:6px">
-        RMS 重投影誤差：${rms.toFixed(4)} px
-        ${rms < 0.5 ? '✓ 優秀' : rms < 1.5 ? '△ 可接受' : '✗ 過大'}
-      </div>
-      <table>
-        <tr><th>參數</th><th>估計值</th><th>Ground Truth</th><th>|誤差|</th></tr>
-        <tr><td>fx</td>
-            <td>${fx.toFixed(2)}</td>
-            <td>${fxTrue.toFixed(2)}</td>
-            <td>${Math.abs(fx - fxTrue).toFixed(2)}</td></tr>
-        <tr><td>fy</td>
-            <td>${fy.toFixed(2)}</td>
-            <td>${fyTrue.toFixed(2)}</td>
-            <td>${Math.abs(fy - fyTrue).toFixed(2)}</td></tr>
-        <tr><td>cx</td>
-            <td>${cx.toFixed(2)}</td>
-            <td>${(FEED_W / 2).toFixed(2)}</td>
-            <td>${Math.abs(cx - FEED_W / 2).toFixed(2)}</td></tr>
-        <tr><td>cy</td>
-            <td>${cy.toFixed(2)}</td>
-            <td>${(FEED_H / 2).toFixed(2)}</td>
-            <td>${Math.abs(cy - FEED_H / 2).toFixed(2)}</td></tr>
-        <tr><td>k₁</td>
-            <td>${dd[0].toFixed(5)}</td>
-            <td>0.00000</td>
-            <td>${Math.abs(dd[0]).toFixed(5)}</td></tr>
-        <tr><td>k₂</td>
-            <td>${dd[1].toFixed(5)}</td>
-            <td>0.00000</td>
-            <td>${Math.abs(dd[1]).toFixed(5)}</td></tr>
-        <tr><td>p₁</td>
-            <td>${dd[2].toFixed(5)}</td>
-            <td>0.00000</td>
-            <td>${Math.abs(dd[2]).toFixed(5)}</td></tr>
-        <tr><td>p₂</td>
-            <td>${dd[3].toFixed(5)}</td>
-            <td>0.00000</td>
-            <td>${Math.abs(dd[3]).toFixed(5)}</td></tr>
-      </table>
-      <div style="color:var(--nord3); margin-top:8px; font-size:0.7rem">
-        $f_y = \\dfrac{H/2}{\\tan(FOV/2)}$ &nbsp;|&nbsp;
-        快照數：${snapshots.length}
-      </div>
-    `;
-
-    // Re-render KaTeX in the new HTML
-    if (typeof renderMathInElement === 'function') {
-      renderMathInElement(resultEl, {
-        delimiters: [
-          { left: '$$', right: '$$', display: true },
-          { left: '$', right: '$', display: false },
-        ],
-      });
-    }
-
-    // Show reprojection overlay for last snapshot
-    showReprojOverlay(snapshots.length - 1, K, dist, rvecs, tvecs);
-
-    // Draw 3D reprojection error rays in main view
-    draw3DErrorRays(K, dist, rvecs, tvecs);
-
-    setStatus(`校正完成！RMS = ${rms.toFixed(4)} px`);
-
+    const result = calibrateCamera({
+      snapshots,
+      boardCols: BOARD_COLS,
+      boardRows: BOARD_ROWS,
+      squareSize: SQUARE,
+      feedW: FEED_W,
+      feedH: FEED_H,
+    });
+    onCalibResult(result);
   } catch (e) {
-    setStatus('校正失敗：' + e.message);
+    setStatus('Calibration failed: ' + e.message);
     console.error(e);
-  } finally {
-    K.delete(); dist.delete(); rvecs.delete(); tvecs.delete();
-    objMats.forEach(m => m.delete());
-    imgMats.forEach(m => m.delete());
-    objVec.delete();
-    imgVec.delete();
   }
 }
 
-// ── Show reprojection on overlay (last snapshot) ──────────────────────────────
-function showReprojOverlay(snapIdx, K, dist, rvecs, tvecs) {
-  const snap = snapshots[snapIdx];
-  const N = BOARD_COLS * BOARD_ROWS;
-  const objMat   = cv.matFromArray(N, 1, cv.CV_32FC3, objPtsFlat);
-  const rvec     = rvecs.get(snapIdx);
-  const tvec     = tvecs.get(snapIdx);
-  const reproj   = new cv.Mat();
+function onCalibResult({ rms, fx, fy, cx, cy, dist, reprojected, lastImgPts }) {
+  const fovRad = THREE.MathUtils.degToRad(virtualCam.fov);
+  const fyTrue = (FEED_H / 2) / Math.tan(fovRad / 2);
+  const fxTrue = fyTrue;
 
-  try {
-    cv.projectPoints(objMat, rvec, tvec, K, dist, reproj);
-    const rd = reproj.data32F;
-    const measured    = [];
-    const reprojected = [];
-    for (let i = 0; i < N; i++) {
-      measured.push({ x: snap.imgPts[i * 2], y: snap.imgPts[i * 2 + 1] });
-      reprojected.push({ x: rd[i * 2], y: rd[i * 2 + 1] });
-    }
-    drawReprojectionOverlay(measured, reprojected);
-    liveOverlay = false;
-  } finally {
-    objMat.delete();
-    reproj.delete();
+  const rmsClass = rms < 0.5 ? 'rms-good' : rms < 1.5 ? 'rms-warn' : 'rms-bad';
+
+  resultEl.innerHTML = `
+    <div class="${rmsClass}" style="font-size:0.9rem;font-weight:bold;margin-bottom:6px">
+      RMS Reprojection Error: ${rms.toFixed(4)} px
+      ${rms < 0.5 ? '✓ Excellent' : rms < 1.5 ? '△ Acceptable' : '✗ Too large'}
+    </div>
+    <table>
+      <tr><th>Param</th><th>Estimated</th><th>Ground Truth</th><th>|Error|</th></tr>
+      <tr><td>fx</td><td>${fx.toFixed(2)}</td><td>${fxTrue.toFixed(2)}</td><td>${Math.abs(fx-fxTrue).toFixed(2)}</td></tr>
+      <tr><td>fy</td><td>${fy.toFixed(2)}</td><td>${fyTrue.toFixed(2)}</td><td>${Math.abs(fy-fyTrue).toFixed(2)}</td></tr>
+      <tr><td>cx</td><td>${cx.toFixed(2)}</td><td>${(FEED_W/2).toFixed(2)}</td><td>${Math.abs(cx-FEED_W/2).toFixed(2)}</td></tr>
+      <tr><td>cy</td><td>${cy.toFixed(2)}</td><td>${(FEED_H/2).toFixed(2)}</td><td>${Math.abs(cy-FEED_H/2).toFixed(2)}</td></tr>
+      <tr><td>k₁</td><td>${dist[0].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[0]).toFixed(5)}</td></tr>
+      <tr><td>k₂</td><td>${dist[1].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[1]).toFixed(5)}</td></tr>
+      <tr><td>p₁</td><td>${dist[2].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[2]).toFixed(5)}</td></tr>
+      <tr><td>p₂</td><td>${dist[3].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[3]).toFixed(5)}</td></tr>
+    </table>
+    <div style="color:var(--nord3);margin-top:8px;font-size:0.7rem">
+      $f_y = \\dfrac{H/2}{\\tan(FOV/2)}$ &nbsp;|&nbsp; snapshots: ${snapshots.length}
+    </div>
+  `;
+
+  if (typeof renderMathInElement === 'function') {
+    renderMathInElement(resultEl, {
+      delimiters: [{ left: '$', right: '$', display: false }],
+    });
   }
-}
 
-// ── Draw reprojection error rays in main 3D view ──────────────────────────────
-function draw3DErrorRays(K, dist, rvecs, tvecs) {
-  // Clear previous error lines
-  while (errorLines.children.length) {
-    errorLines.children[0].geometry.dispose();
-    errorLines.remove(errorLines.children[0]);
+  // Draw reprojection overlay
+  const measured    = [];
+  const reprojPts   = [];
+  for (let i = 0; i < lastImgPts.length / 2; i++) {
+    measured.push({ x: lastImgPts[i * 2], y: lastImgPts[i * 2 + 1] });
+    reprojPts.push({ x: reprojected[i][0], y: reprojected[i][1] });
   }
+  drawReprojectionOverlay(measured, reprojPts);
+  liveOverlay = false;
 
-  // For each snapshot, draw small line segments showing extrinsics
-  for (let s = 0; s < Math.min(snapshots.length, 5); s++) {
-    const N = BOARD_COLS * BOARD_ROWS;
-    const objMat = cv.matFromArray(N, 1, cv.CV_32FC3, objPtsFlat);
-    const rvec   = rvecs.get(s);
-    const tvec   = tvecs.get(s);
-    const reproj = new cv.Mat();
-
-    try {
-      cv.projectPoints(objMat, rvec, tvec, K, dist, reproj);
-    } finally {
-      objMat.delete();
-      reproj.delete();
-    }
-
-    // Draw extrinsic axes at estimated camera pose
-    const R = new cv.Mat();
-    cv.Rodrigues(rvec, R);
-    const rd = R.data64F;
-    const td = tvec.data64F;
-
-    // Camera center in world = -R^T * t
-    const tx = td[0], ty = td[1], tz = td[2];
-    const cx = -(rd[0]*tx + rd[3]*ty + rd[6]*tz);
-    const cy = -(rd[1]*tx + rd[4]*ty + rd[7]*tz);
-    const cz = -(rd[2]*tx + rd[5]*ty + rd[8]*tz);
-
-    // Coordinate transform: OpenCV (Y-down, Z-forward) → Three.js (Y-up, Z-back)
-    // In Three.js world, board is on XZ plane (Y=0).
-    // OpenCV board frame: X right, Y down, Z out of board.
-    // The corner positions in Three.js world space define the board.
-    // For visualisation, just mark the estimated camera center
-    const sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.006, 8, 8),
-      new THREE.MeshBasicMaterial({ color: [0xBF616A, 0xD08770, 0xEBCB8B, 0xA3BE8C, 0xB48EAD][s] })
-    );
-    // OpenCV → Three.js: board is XZ in Three.js, XY in OpenCV
-    // The board frame X maps to Three.js X, board frame Y maps to Three.js Z
-    sphere.position.set(cx, cz, cy);
-    errorLines.add(sphere);
-
-    R.delete();
-  }
+  markDirty();
+  setStatus(`Calibrated! RMS = ${rms.toFixed(4)} px`);
 }
 
 // ── lil-gui setup ─────────────────────────────────────────────────────────────
 const gui = new GUI({ container: document.getElementById('gui-mount'), title: 'Camera Calibration Lab' });
 gui.domElement.style.position = 'relative';
 
-const extFolder = gui.addFolder('外參 Extrinsics');
+const extFolder = gui.addFolder('Extrinsics');
 extFolder.add(params, 'camX', -0.35, 0.35, 0.005).name('X (m)').onChange(syncCam);
 extFolder.add(params, 'camY', 0.04,  0.55, 0.005).name('Y (m)').onChange(syncCam);
 extFolder.add(params, 'camZ', -0.35, 0.55, 0.005).name('Z (m)').onChange(syncCam);
@@ -506,27 +380,27 @@ extFolder.add(params, 'rotX', -85,   10,   1).name('Rot X°').onChange(syncCam);
 extFolder.add(params, 'rotY', -70,   70,   1).name('Rot Y°').onChange(syncCam);
 extFolder.add(params, 'rotZ', -40,   40,   1).name('Rot Z°').onChange(syncCam);
 
-const intFolder = gui.addFolder('內參 Intrinsics');
+const intFolder = gui.addFolder('Intrinsics');
 intFolder.add(params, 'fov', 20, 100, 1).name('Vertical FOV°').onChange(syncCam);
 
-const simFolder = gui.addFolder('模擬');
-simFolder.add(params, 'noise', 0, 5, 0.1).name('噪聲 σ (px)');
+const simFolder = gui.addFolder('Simulation');
+simFolder.add(params, 'noise', 0, 5, 0.1).name('Noise σ (px)');
 
-const actFolder = gui.addFolder('操作');
-actFolder.add({ fn: takeSnapshot }, 'fn').name('📸 擷取快照');
-actFolder.add({ fn: calibrate },    'fn').name('⚙️ 執行校正');
+const actFolder = gui.addFolder('Actions');
+actFolder.add({ fn: takeSnapshot }, 'fn').name('📸 Take Snapshot');
+actFolder.add({ fn: calibrate },    'fn').name('⚙️  Calibrate');
 actFolder.add({
   fn() {
     snapshots.length = 0;
     liveOverlay = true;
-    resultEl.innerHTML = '<span style="color:var(--nord3)">快照已清除，等待校正…</span>';
-    while (errorLines.children.length) {
-      errorLines.children[0].geometry.dispose();
-      errorLines.remove(errorLines.children[0]);
-    }
-    setStatus('已清除');
+    resultEl.innerHTML = '<span style="color:var(--nord3)">Snapshots cleared — awaiting calibration…</span>';
+    markDirty();
+    setStatus('Cleared');
   }
-}, 'fn').name('🗑 清除快照');
+}, 'fn').name('🗑  Clear Snapshots');
+
+// Orbit fires 'change' while the user drags or damping is decelerating
+orbit.addEventListener('change', markDirty);
 
 // ── Resize main canvas ────────────────────────────────────────────────────────
 function resize() {
@@ -536,31 +410,39 @@ function resize() {
   mainRenderer.setSize(w, h);
   mainCam.aspect = w / h;
   mainCam.updateProjectionMatrix();
+  markDirty();
 }
 window.addEventListener('resize', resize);
 resize();
 
-setStatus('就緒 — 移動相機後按「擷取快照」（需 3+ 張不同角度）');
+setStatus('Ready — move the camera then take 3+ snapshots from different angles');
 
 // ── Animation loop ─────────────────────────────────────────────────────────────
-function animate() {
+function animate(now = 0) {
   requestAnimationFrame(animate);
+
+  // Required every frame for damping to work; fires 'change' when still moving
   orbit.update();
-  camHelper.update();
 
-  // Main 3D world view
-  mainRenderer.render(scene, mainCam);
+  if (mainDirty) {
+    mainDirty = false;
+    camHelper.update();
+    mainRenderer.render(scene, mainCam);
+  }
 
-  // Feed: hide helpers & camera body, render from virtual camera
-  camHelper.visible = false;
-  bodyMesh.visible  = false;
-  lensMesh.visible  = false;
-  feedRenderer.render(scene, virtualCam);
-  camHelper.visible = true;
-  bodyMesh.visible  = true;
-  lensMesh.visible  = true;
+  if (feedDirty && now - lastFeedMs >= FEED_INTERVAL_MS) {
+    lastFeedMs = now;
+    feedDirty = false;
 
-  // Overlay
-  if (liveOverlay) drawLiveCorners(projectCorners());
+    camHelper.visible = false;
+    bodyMesh.visible  = false;
+    lensMesh.visible  = false;
+    feedRenderer.render(scene, virtualCam);
+    camHelper.visible = true;
+    bodyMesh.visible  = true;
+    lensMesh.visible  = true;
+
+    if (liveOverlay) drawLiveCorners(projectCorners());
+  }
 }
 animate();

@@ -28,11 +28,6 @@
   }
   </script>
 
-  <!-- OpenCV.js WASM -->
-  <script async src="https://docs.opencv.org/4.x/opencv.js"
-    onload="window._cvReady = true; document.getElementById('cv-status').textContent = 'OpenCV.js ✓';"
-    onerror="document.getElementById('cv-status').textContent = 'OpenCV.js 載入失敗';"></script>
-
   <style>
     :root {
       --nord0:  #2E3440;
@@ -191,20 +186,20 @@
     <div id="gui-mount"></div>
 
     <div id="status-bar">
-      <span id="snap-status">快照：0 張 | 就緒</span>
-      <span id="cv-status">OpenCV.js 載入中…</span>
+      <span id="snap-status">Snapshots: 0 | Ready</span>
+      <span id="cv-status">Zhang's method (pure JS)</span>
     </div>
 
     <div id="feed-wrap">
       <canvas id="feed" width="640" height="480"></canvas>
       <canvas id="overlay" width="640" height="480"></canvas>
-      <div id="feed-label">Camera Feed (Virtual Cam)</div>
+      <div id="feed-label">Camera Feed — Virtual Cam</div>
     </div>
 
     <div id="result">
-      <span style="color:var(--nord3)">等待校正… 至少需要 3 張不同角度的快照。</span>
+      <span style="color:var(--nord3)">Awaiting calibration — take at least 3 snapshots from different angles.</span>
       <p style="margin-top:6px; color:var(--nord3)">
-        公式：$f_y = \dfrac{H/2}{\tan(FOV/2)}$
+        $f_y = \dfrac{H/2}{\tan(FOV/2)}$
       </p>
     </div>
   </div>
