@@ -325,7 +325,32 @@
 
     .lang-en, .lang-zh { display: none; }
     .lang-en.active, .lang-zh.active { display: block; }
+
+    /* ── Code section in modal ── */
+    #code-section {
+      border-top: 1px solid var(--nord3);
+      margin-top: 22px;
+      padding-top: 6px;
+    }
+
+    #help-body pre {
+      margin: 10px 0 0;
+      border-radius: 6px;
+      max-height: 420px;
+      overflow-y: auto;
+      font-size: 0.74rem;
+      line-height: 1.55;
+    }
+
+    #help-body pre[class*="language-"] {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      border-radius: 6px;
+      font-size: 0.74rem;
+    }
   </style>
+
+  <!-- Prism.js Nord theme -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prism-themes@1.9.0/themes/prism-nord.css" />
 </head>
 <body>
   <canvas id="main"></canvas>
@@ -464,6 +489,12 @@
 
         </div><!-- .lang-zh -->
 
+        <!-- ═══ CODE (shared, language-agnostic) ══════════════════════════ -->
+        <div id="code-section">
+          <h2>Implementation — <code style="font-size:.82em;color:var(--nord13);background:var(--nord0);padding:1px 6px;border-radius:3px;">calib.js</code></h2>
+          <pre><code id="calib-code" class="language-javascript">Loading…</code></pre>
+        </div>
+
       </div><!-- #help-body -->
     </div><!-- #help-box -->
   </div><!-- #help-modal -->
@@ -526,9 +557,22 @@
     const enDiv    = document.querySelector('.lang-en');
     const zhDiv    = document.querySelector('.lang-zh');
     let lang = 'en';
+    let codeLoaded = false;
 
     function openModal() {
       modal.classList.remove('hidden');
+      if (codeLoaded) return;
+      const codeEl = document.getElementById('calib-code');
+      fetch('./src/calib.js')
+        .then(function (r) { return r.text(); })
+        .then(function (src) {
+          codeEl.textContent = src;
+          if (typeof Prism !== 'undefined') Prism.highlightElement(codeEl);
+          codeLoaded = true;
+        })
+        .catch(function () {
+          codeEl.textContent = '// Could not load calib.js';
+        });
     }
 
     function closeModal() {
@@ -553,5 +597,8 @@
     });
   })();
   </script>
+
+  <script>window.Prism = window.Prism || {}; Prism.manual = true;</script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
 </body>
 </html>
