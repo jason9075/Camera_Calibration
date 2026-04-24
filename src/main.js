@@ -245,9 +245,10 @@ const snapshots = [];   // [{ imgPts: Float32Array, camState }]
 let liveOverlay = true;
 
 // ── UI elements ───────────────────────────────────────────────────────────────
-const snapStatusEl = document.getElementById('snap-status');
-const cvStatusEl   = document.getElementById('cv-status');
-const resultEl     = document.getElementById('result');
+const snapStatusEl  = document.getElementById('snap-status');
+const cvStatusEl    = document.getElementById('cv-status');
+const resultSumEl   = document.getElementById('result-summary');
+const resultEl      = document.getElementById('result-detail');
 cvStatusEl.textContent = "Zhang's method (pure JS)";
 
 function setStatus(msg) {
@@ -366,33 +367,27 @@ function onCalibResult({ rms, fx, fy, cx, cy, dist, reprojected, lastImgPts }) {
   const fxTrue = fyTrue;
 
   const rmsClass = rms < 0.5 ? 'rms-good' : rms < 1.5 ? 'rms-warn' : 'rms-bad';
+  const rmsLabel = rms < 0.5 ? '✓ Excellent' : rms < 1.5 ? '△ Acceptable' : '✗ Too large';
+
+  resultSumEl.innerHTML =
+    `<span class="${rmsClass}">RMS Reprojection Error: ${rms.toFixed(4)} px &nbsp;${rmsLabel}</span>`;
 
   resultEl.innerHTML = `
-    <div class="${rmsClass}" style="font-size:0.9rem;font-weight:bold;margin-bottom:6px">
-      RMS Reprojection Error: ${rms.toFixed(4)} px
-      ${rms < 0.5 ? '✓ Excellent' : rms < 1.5 ? '△ Acceptable' : '✗ Too large'}
-    </div>
-    <table>
-      <tr><th>Param</th><th>Estimated</th><th>Ground Truth</th><th>|Error|</th></tr>
-      <tr><td>fx</td><td>${fx.toFixed(2)}</td><td>${fxTrue.toFixed(2)}</td><td>${Math.abs(fx-fxTrue).toFixed(2)}</td></tr>
-      <tr><td>fy</td><td>${fy.toFixed(2)}</td><td>${fyTrue.toFixed(2)}</td><td>${Math.abs(fy-fyTrue).toFixed(2)}</td></tr>
-      <tr><td>cx</td><td>${cx.toFixed(2)}</td><td>${(FEED_W/2).toFixed(2)}</td><td>${Math.abs(cx-FEED_W/2).toFixed(2)}</td></tr>
-      <tr><td>cy</td><td>${cy.toFixed(2)}</td><td>${(FEED_H/2).toFixed(2)}</td><td>${Math.abs(cy-FEED_H/2).toFixed(2)}</td></tr>
-      <tr><td>k₁</td><td>${dist[0].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[0]).toFixed(5)}</td></tr>
-      <tr><td>k₂</td><td>${dist[1].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[1]).toFixed(5)}</td></tr>
-      <tr><td>p₁</td><td>${dist[2].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[2]).toFixed(5)}</td></tr>
-      <tr><td>p₂</td><td>${dist[3].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[3]).toFixed(5)}</td></tr>
-    </table>
-    <div style="color:var(--nord3);margin-top:8px;font-size:0.7rem">
-      $f_y = \\dfrac{H/2}{\\tan(FOV/2)}$ &nbsp;|&nbsp; snapshots: ${snapshots.length}
+    <div style="padding:8px 12px 12px">
+      <table>
+        <tr><th>Param</th><th>Estimated</th><th>Ground Truth</th><th>|Error|</th></tr>
+        <tr><td>fx</td><td>${fx.toFixed(2)}</td><td>${fxTrue.toFixed(2)}</td><td>${Math.abs(fx-fxTrue).toFixed(2)}</td></tr>
+        <tr><td>fy</td><td>${fy.toFixed(2)}</td><td>${fyTrue.toFixed(2)}</td><td>${Math.abs(fy-fyTrue).toFixed(2)}</td></tr>
+        <tr><td>cx</td><td>${cx.toFixed(2)}</td><td>${(FEED_W/2).toFixed(2)}</td><td>${Math.abs(cx-FEED_W/2).toFixed(2)}</td></tr>
+        <tr><td>cy</td><td>${cy.toFixed(2)}</td><td>${(FEED_H/2).toFixed(2)}</td><td>${Math.abs(cy-FEED_H/2).toFixed(2)}</td></tr>
+        <tr><td>k₁</td><td>${dist[0].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[0]).toFixed(5)}</td></tr>
+        <tr><td>k₂</td><td>${dist[1].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[1]).toFixed(5)}</td></tr>
+        <tr><td>p₁</td><td>${dist[2].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[2]).toFixed(5)}</td></tr>
+        <tr><td>p₂</td><td>${dist[3].toFixed(5)}</td><td>0.00000</td><td>${Math.abs(dist[3]).toFixed(5)}</td></tr>
+      </table>
+      <div style="color:var(--nord3);margin-top:6px;font-size:0.7rem">snapshots: ${snapshots.length}</div>
     </div>
   `;
-
-  if (typeof renderMathInElement === 'function') {
-    renderMathInElement(resultEl, {
-      delimiters: [{ left: '$', right: '$', display: false }],
-    });
-  }
 
   // Draw reprojection overlay
   const measured    = [];

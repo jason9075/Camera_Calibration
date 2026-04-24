@@ -92,18 +92,20 @@
     /* ── Feed container ── */
     #feed-wrap {
       position: relative;
-      width: 640px;
-      height: 480px;
+      width: calc(100% - 20px);
+      aspect-ratio: 640 / 480;
       margin: 8px 10px;
-      flex-shrink: 0;
+      flex-shrink: 1;
+      min-height: 140px;
       border: 2px solid var(--nord3);
+      overflow: hidden;
     }
 
     #feed, #overlay {
       position: absolute;
       top: 0; left: 0;
-      width: 640px;
-      height: 480px;
+      width: 100%;
+      height: 100%;
     }
 
     #overlay { pointer-events: none; }
@@ -136,37 +138,81 @@
 
     #snap-status { color: var(--nord8); }
 
-    /* ── Result panel ── */
-    #result {
-      padding: 8px 10px 12px;
-      font-size: 0.75rem;
-      flex: 1;
-      overflow-y: auto;
+    .rms-good  { color: var(--nord14); }
+    .rms-warn  { color: var(--nord13); }
+    .rms-bad   { color: var(--nord11); }
+
+    /* ── Floating result panel ── */
+    #result-float {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 150;
+      background: var(--nord1);
+      border: 1px solid var(--nord3);
+      border-radius: 6px;
+      min-width: 320px;
+      max-width: 600px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, .45);
+      user-select: none;
     }
 
-    #result table {
+    #result-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      cursor: grab;
+      background: var(--nord2);
+      border-radius: 6px 6px 0 0;
+    }
+    #result-header:active { cursor: grabbing; }
+
+    #result-toggle {
+      background: none;
+      border: none;
+      color: var(--nord9);
+      cursor: pointer;
+      font-size: 0.65rem;
+      padding: 0 2px;
+      flex-shrink: 0;
+      line-height: 1;
+      transition: color .12s;
+    }
+    #result-toggle:hover { color: var(--nord8); }
+
+    #result-summary {
+      font-size: 0.8rem;
+      color: var(--nord4);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #result-detail {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height .25s ease;
+    }
+    #result-detail.open { max-height: 500px; }
+
+    #result-detail table {
       border-collapse: collapse;
       width: 100%;
       margin-top: 6px;
     }
-
-    #result th, #result td {
+    #result-detail th, #result-detail td {
       padding: 3px 8px;
       border: 1px solid var(--nord3);
       text-align: right;
     }
-
-    #result th {
+    #result-detail th {
       background: var(--nord2);
       color: var(--nord6);
       text-align: center;
     }
-
-    #result td:first-child { text-align: left; color: var(--nord9); }
-
-    .rms-good  { color: var(--nord14); }
-    .rms-warn  { color: var(--nord13); }
-    .rms-bad   { color: var(--nord11); }
+    #result-detail td:first-child { text-align: left; color: var(--nord9); }
 
     /* ── Info overlay on main canvas ── */
     #info {
@@ -298,17 +344,20 @@
       <div id="feed-label">Camera Feed — Virtual Cam</div>
     </div>
 
-    <div id="result">
-      <span style="color:var(--nord3)">Awaiting calibration — take at least 3 snapshots from different angles.</span>
-      <p style="margin-top:6px; color:var(--nord3)">
-        $f_y = \dfrac{H/2}{\tan(FOV/2)}$
-      </p>
-    </div>
   </div>
 
   <a href="https://github.com/jason9075/Camera_Calibration" style="position:fixed;top:0;left:0;z-index:1000;border:0;">
     <img loading="lazy" decoding="async" width="149" height="149" src="https://github.blog/wp-content/uploads/2008/12/forkme_left_darkblue_121621.png" alt="Fork me on GitHub" />
   </a>
+
+  <!-- ── Floating result panel ────────────────────────────────────────────── -->
+  <div id="result-float">
+    <div id="result-header">
+      <button id="result-toggle" title="Toggle details">▶</button>
+      <span id="result-summary" style="color:var(--nord4)">Awaiting calibration — take 3+ snapshots from different angles</span>
+    </div>
+    <div id="result-detail"></div>
+  </div>
 
   <script type="module" src="./src/main.js"></script>
 
@@ -418,6 +467,55 @@
       </div><!-- #help-body -->
     </div><!-- #help-box -->
   </div><!-- #help-modal -->
+
+  <!-- ── Floating result drag + toggle ────────────────────────────────────── -->
+  <script>
+  (function () {
+    const el     = document.getElementById('result-float');
+    const hdr    = document.getElementById('result-header');
+    const toggle = document.getElementById('result-toggle');
+    const detail = document.getElementById('result-detail');
+    let dragging = false, ox = 0, oy = 0, pinned = false;
+
+    function pin() {
+      if (pinned) return;
+      const r = el.getBoundingClientRect();
+      el.style.left      = r.left + 'px';
+      el.style.top       = r.top  + 'px';
+      el.style.bottom    = 'auto';
+      el.style.transform = 'none';
+      pinned = true;
+    }
+
+    hdr.addEventListener('mousedown', function (e) {
+      if (e.target === toggle) return;
+      pin();
+      dragging = true;
+      ox = e.clientX - el.getBoundingClientRect().left;
+      oy = e.clientY - el.getBoundingClientRect().top;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      el.style.left = Math.max(0, Math.min(window.innerWidth  - el.offsetWidth,  e.clientX - ox)) + 'px';
+      el.style.top  = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, e.clientY - oy)) + 'px';
+    });
+
+    document.addEventListener('mouseup', function () { dragging = false; });
+
+    toggle.addEventListener('click', function () {
+      const open = detail.classList.toggle('open');
+      toggle.textContent = open ? '▼' : '▶';
+      if (pinned) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom > window.innerHeight) {
+          el.style.top = Math.max(0, window.innerHeight - el.offsetHeight - 8) + 'px';
+        }
+      }
+    });
+  })();
+  </script>
 
   <script>
   (function () {
