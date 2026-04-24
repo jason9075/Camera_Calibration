@@ -177,6 +177,108 @@
       font-size: 0.75rem;
       pointer-events: none;
     }
+
+    /* ── Help button ── */
+    #help-btn {
+      position: fixed;
+      bottom: 14px;
+      left: 14px;
+      font-size: 1.45rem;
+      background: rgba(59, 66, 82, 0.88);
+      border: 1px solid var(--nord3);
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      cursor: pointer;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .15s, transform .15s;
+      line-height: 1;
+    }
+    #help-btn:hover { background: var(--nord2); transform: scale(1.12); }
+
+    /* ── Modal overlay ── */
+    #help-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(46, 52, 64, .82);
+      backdrop-filter: blur(4px);
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #help-modal.hidden { display: none; }
+
+    #help-box {
+      background: var(--nord1);
+      border: 1px solid var(--nord3);
+      border-radius: 8px;
+      width: min(860px, 92vw);
+      max-height: 87vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, .55);
+    }
+
+    #help-hdr {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: var(--nord2);
+      border-bottom: 1px solid var(--nord3);
+      border-radius: 8px 8px 0 0;
+      flex-shrink: 0;
+    }
+    #help-hdr span { color: var(--nord8); font-size: .88rem; font-weight: bold; flex: 1; }
+
+    .hbtn {
+      background: var(--nord3);
+      color: var(--nord5);
+      border: none;
+      border-radius: 4px;
+      padding: 3px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: .75rem;
+      white-space: nowrap;
+      transition: background .12s;
+    }
+    .hbtn:hover { background: var(--nord10); color: var(--nord6); }
+
+    #help-body {
+      overflow-y: auto;
+      padding: 20px 26px 28px;
+      font-size: .8rem;
+      line-height: 1.8;
+      color: var(--nord4);
+    }
+    #help-body h2 {
+      color: var(--nord8);
+      font-size: .87rem;
+      margin: 24px 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--nord3);
+    }
+    #help-body h2:first-child { margin-top: 0; }
+    #help-body p { margin-bottom: 10px; }
+    #help-body .katex-display { margin: 10px 0 14px; overflow-x: auto; }
+    #help-body strong { color: var(--nord6); }
+    #help-body .note {
+      background: var(--nord0);
+      border-left: 3px solid var(--nord10);
+      padding: 6px 12px;
+      margin: 10px 0;
+      border-radius: 0 4px 4px 0;
+      font-size: .76rem;
+      color: var(--nord9);
+    }
+
+    .lang-en, .lang-zh { display: none; }
+    .lang-en.active, .lang-zh.active { display: block; }
   </style>
 </head>
 <body>
@@ -204,8 +306,154 @@
     </div>
   </div>
 
-  <div id="info">Camera Calibration Lab | Three.js + OpenCV.js</div>
+  <a href="https://github.com/jason9075/Camera_Calibration" style="position:fixed;top:0;left:0;z-index:1000;border:0;">
+    <img loading="lazy" decoding="async" width="149" height="149" src="https://github.blog/wp-content/uploads/2008/12/forkme_left_darkblue_121621.png" alt="Fork me on GitHub" />
+  </a>
 
   <script type="module" src="./src/main.js"></script>
+
+  <!-- ── 💡 Help button ─────────────────────────────────────────────────── -->
+  <button id="help-btn" title="Math Primer">💡</button>
+
+  <!-- ── Math primer modal ─────────────────────────────────────────────── -->
+  <div id="help-modal" class="hidden">
+    <div id="help-box">
+      <div id="help-hdr">
+        <span>Camera Calibration — Math Primer</span>
+        <button class="hbtn" id="lang-toggle">中文</button>
+        <button class="hbtn" id="help-close">✕</button>
+      </div>
+      <div id="help-body">
+
+        <!-- ═══ ENGLISH ═══════════════════════════════════════════════════ -->
+        <div class="lang-en active">
+
+          <h2>1. Pinhole Camera Model</h2>
+          <p>A 3-D world point $\mathbf{X} = (X, Y, Z)^\top$ projects to image pixel $(u, v)$ via:</p>
+          $$\begin{pmatrix} u \\ v \\ 1 \end{pmatrix} \sim K \begin{bmatrix} R \mid t \end{bmatrix} \begin{pmatrix} X \\ Y \\ Z \\ 1 \end{pmatrix}$$
+          <p>The <strong>intrinsic matrix</strong> $K$ encodes focal length and principal point:</p>
+          $$K = \begin{pmatrix} f_x & 0 & c_x \\ 0 & f_y & c_y \\ 0 & 0 & 1 \end{pmatrix}$$
+          <p>This simulation assumes <strong>square pixels</strong> ($f_x = f_y = f$) and a <strong>centred principal point</strong> ($c_x = W/2,\; c_y = H/2$), so there is only one unknown: the focal length $f$.</p>
+
+          <h2>2. Homography — Board Plane to Image</h2>
+          <p>The calibration board lies entirely on $Z = 0$, so the third rotation column $r_3$ drops out and the full projection collapses to a $3 \times 3$ mapping:</p>
+          $$\tilde{\mathbf{u}} \sim H\,\tilde{\mathbf{X}}, \qquad H = K\bigl[r_1 \mid r_2 \mid t\bigr]$$
+          <p>Each captured view contributes one homography $H$ with <strong>8 degrees of freedom</strong>. At least 4 non-collinear corners per view are required.</p>
+
+          <h2>3. DLT — Computing H via Least Squares</h2>
+          <p>For each corner correspondence $(X_i, Y_i) \leftrightarrow (u_i, v_i)$, the cross-product constraint $\tilde{\mathbf{u}} \times H\tilde{\mathbf{X}} = 0$ yields two linear equations:</p>
+          $$\begin{bmatrix} \mathbf{X}_i^\top & \mathbf{0} & -u_i\,\mathbf{X}_i^\top \\ \mathbf{0} & \mathbf{X}_i^\top & -v_i\,\mathbf{X}_i^\top \end{bmatrix} \mathbf{h} = \mathbf{0}$$
+          <p>Stack $n$ corners into matrix $A$, fix $h_9 = 1$, and solve the $8 \times 8$ normal equations $A^\top A\,\mathbf{h} = A^\top \mathbf{b}$ via Gaussian elimination with partial pivoting.</p>
+          <div class="note"><strong>Hartley normalisation</strong> — both point sets are translated to the origin and scaled so the mean point-to-origin distance is $\sqrt{2}$, dramatically improving the numerical conditioning of $A^\top A$.</div>
+
+          <h2>4. Zhang's Constraints — Recovering $f$</h2>
+          <p>Rotation columns are orthonormal: $r_1 \cdot r_2 = 0$ and $\lVert r_1 \rVert = \lVert r_2 \rVert$. Substituting $r_i = \tfrac{1}{\lambda}K^{-1}h_i$ and letting $\mathbf{p}_i = K^{-1}h_i$ (centred) gives <strong>two independent $f^2$ estimates per view</strong>:</p>
+          $$f^2 = \frac{-(p_{1x}p_{2x}+p_{1y}p_{2y})}{p_{1z}p_{2z}} \qquad \text{(orthogonality: }r_1\cdot r_2=0\text{)}$$
+          $$f^2 = \frac{p_{2x}^2+p_{2y}^2-p_{1x}^2-p_{1y}^2}{p_{1z}^2-p_{2z}^2} \qquad \text{(equal norm: }\lVert r_1\rVert=\lVert r_2\rVert\text{)}$$
+          <p>Only estimates with $f^2 > 0$ are kept. The <strong>median</strong> across all views and both constraints is taken as the final focal length.</p>
+          <div class="note">Ground truth check: $f_y = \dfrac{H/2}{\tan(\mathrm{FOV}/2)}$ — the focal length is directly derivable from the Three.js perspective FOV.</div>
+
+          <h2>5. Pose Recovery (R, t per View)</h2>
+          <p>With $f$ known, the scale factor $\lambda = \lVert K^{-1}h_1 \rVert$ normalises each homography column to unit length:</p>
+          $$r_1 = \tfrac{1}{\lambda}K^{-1}h_1, \quad r_2 = \tfrac{1}{\lambda}K^{-1}h_2, \quad r_3 = r_1 \times r_2, \quad t = \tfrac{1}{\lambda}K^{-1}h_3$$
+          <p>$r_3$ is recovered via the cross product, ensuring a right-handed coordinate frame.</p>
+
+          <h2>6. RMS Reprojection Error</h2>
+          <p>Each 3-D object point is projected through the estimated $(K, R, t)$ and compared with the measured pixel:</p>
+          $$\begin{pmatrix} X_c \\ Y_c \\ Z_c \end{pmatrix} = R\mathbf{X}+t, \qquad \hat{u} = f\frac{X_c}{Z_c}+c_x, \quad \hat{v} = f\frac{Y_c}{Z_c}+c_y$$
+          $$\mathrm{RMS} = \sqrt{\frac{1}{NM}\sum_{i=1}^{N}\sum_{j=1}^{M}\bigl\lVert\hat{\mathbf{p}}_{ij}-\mathbf{p}_{ij}\bigr\rVert^2}$$
+          <p>$N$ = views, $M$ = corners per view.
+          Below $0.5\,\mathrm{px}$ → <strong style="color:var(--nord14)">Excellent</strong> &nbsp;|&nbsp;
+          $0.5$–$1.5\,\mathrm{px}$ → <strong style="color:var(--nord13)">Acceptable</strong> &nbsp;|&nbsp;
+          above $1.5\,\mathrm{px}$ → <strong style="color:var(--nord11)">Too large</strong>.
+          With Gaussian noise $\sigma$, the theoretical minimum RMS approaches $\sigma$ as the number of views grows.</p>
+
+        </div><!-- .lang-en -->
+
+        <!-- ═══ TRADITIONAL CHINESE ════════════════════════════════════════ -->
+        <div class="lang-zh">
+
+          <h2>1. 針孔相機模型</h2>
+          <p>三維世界座標 $\mathbf{X} = (X, Y, Z)^\top$ 透過下式投影至像素座標 $(u, v)$：</p>
+          $$\begin{pmatrix} u \\ v \\ 1 \end{pmatrix} \sim K \begin{bmatrix} R \mid t \end{bmatrix} \begin{pmatrix} X \\ Y \\ Z \\ 1 \end{pmatrix}$$
+          <p><strong>內參矩陣</strong> $K$ 包含焦距與主點資訊：</p>
+          $$K = \begin{pmatrix} f_x & 0 & c_x \\ 0 & f_y & c_y \\ 0 & 0 & 1 \end{pmatrix}$$
+          <p>本系統假設<strong>方形像素</strong>（$f_x = f_y = f$）且<strong>主點置中</strong>（$c_x = W/2,\; c_y = H/2$），因此只剩一個未知數：焦距 $f$。</p>
+
+          <h2>2. 單應矩陣 — 標定板平面到影像</h2>
+          <p>標定板完全位於 $Z = 0$ 平面，旋轉矩陣第三列 $r_3$ 因此消去，完整投影化簡為 $3 \times 3$ 的映射：</p>
+          $$\tilde{\mathbf{u}} \sim H\,\tilde{\mathbf{X}}, \qquad H = K\bigl[r_1 \mid r_2 \mid t\bigr]$$
+          <p>每個拍攝視角提供一個具有 <strong>8 個自由度</strong>的單應矩陣 $H$。每個視角至少需要 4 個不共線的角點才能求解。</p>
+
+          <h2>3. DLT — 最小二乘法計算單應矩陣</h2>
+          <p>對每個角點對應 $(X_i, Y_i) \leftrightarrow (u_i, v_i)$，叉積約束 $\tilde{\mathbf{u}} \times H\tilde{\mathbf{X}} = 0$ 展開為兩條線性方程：</p>
+          $$\begin{bmatrix} \mathbf{X}_i^\top & \mathbf{0} & -u_i\,\mathbf{X}_i^\top \\ \mathbf{0} & \mathbf{X}_i^\top & -v_i\,\mathbf{X}_i^\top \end{bmatrix} \mathbf{h} = \mathbf{0}$$
+          <p>將 $n$ 個角點堆疊為矩陣 $A$，固定 $h_9 = 1$ 後，以部分主元高斯消去法求解 $8 \times 8$ 法方程 $A^\top A\,\mathbf{h} = A^\top \mathbf{b}$。</p>
+          <div class="note"><strong>Hartley 正規化</strong> — 兩組點集平移至原點並縮放，使平均點到原點距離為 $\sqrt{2}$，大幅改善 $A^\top A$ 的數值條件數，提升求解穩定性。</div>
+
+          <h2>4. Zhang 的約束條件 — 還原焦距 $f$</h2>
+          <p>旋轉矩陣具有正交歸一性：$r_1 \cdot r_2 = 0$ 且 $\lVert r_1 \rVert = \lVert r_2 \rVert$。代入 $r_i = \tfrac{1}{\lambda}K^{-1}h_i$，令 $\mathbf{p}_i = K^{-1}h_i$（中心平移後），每個視角可得<strong>兩個獨立的 $f^2$ 估計</strong>：</p>
+          $$f^2 = \frac{-(p_{1x}p_{2x}+p_{1y}p_{2y})}{p_{1z}p_{2z}} \qquad \text{（正交性：}r_1\cdot r_2=0\text{）}$$
+          $$f^2 = \frac{p_{2x}^2+p_{2y}^2-p_{1x}^2-p_{1y}^2}{p_{1z}^2-p_{2z}^2} \qquad \text{（等模長：}\lVert r_1\rVert=\lVert r_2\rVert\text{）}$$
+          <p>僅保留 $f^2 > 0$ 的有效估計，取所有視角與兩個約束的<strong>中位數</strong>作為最終焦距。</p>
+          <div class="note">理論真值驗算：$f_y = \dfrac{H/2}{\tan(\mathrm{FOV}/2)}$，可直接由 Three.js 的透視 FOV 推導，用以評估校正精度。</div>
+
+          <h2>5. 外參還原（每個視角的 R、t）</h2>
+          <p>已知 $f$ 後，尺度因子 $\lambda = \lVert K^{-1}h_1 \rVert$ 將單應矩陣各列正規化為單位長度：</p>
+          $$r_1 = \tfrac{1}{\lambda}K^{-1}h_1, \quad r_2 = \tfrac{1}{\lambda}K^{-1}h_2, \quad r_3 = r_1 \times r_2, \quad t = \tfrac{1}{\lambda}K^{-1}h_3$$
+          <p>$r_3$ 透過叉積計算，確保構成右手座標系。</p>
+
+          <h2>6. RMS 重投影誤差</h2>
+          <p>將每個三維物體點透過估計的 $(K, R, t)$ 投影，與量測到的像素座標比較：</p>
+          $$\begin{pmatrix} X_c \\ Y_c \\ Z_c \end{pmatrix} = R\mathbf{X}+t, \qquad \hat{u} = f\frac{X_c}{Z_c}+c_x, \quad \hat{v} = f\frac{Y_c}{Z_c}+c_y$$
+          $$\mathrm{RMS} = \sqrt{\frac{1}{NM}\sum_{i=1}^{N}\sum_{j=1}^{M}\bigl\lVert\hat{\mathbf{p}}_{ij}-\mathbf{p}_{ij}\bigr\rVert^2}$$
+          <p>$N$ 為視角數，$M$ 為每張的角點數。
+          低於 $0.5\,\mathrm{px}$ → <strong style="color:var(--nord14)">優秀</strong>&nbsp;|&nbsp;
+          $0.5$–$1.5\,\mathrm{px}$ → <strong style="color:var(--nord13)">可接受</strong>&nbsp;|&nbsp;
+          超過 $1.5\,\mathrm{px}$ → <strong style="color:var(--nord11)">過大</strong>。
+          在高斯噪聲 $\sigma$ 下，隨視角數增加，RMS 理論下限趨近於 $\sigma$。</p>
+
+        </div><!-- .lang-zh -->
+
+      </div><!-- #help-body -->
+    </div><!-- #help-box -->
+  </div><!-- #help-modal -->
+
+  <script>
+  (function () {
+    const modal   = document.getElementById('help-modal');
+    const openBtn = document.getElementById('help-btn');
+    const closeBtn = document.getElementById('help-close');
+    const langBtn  = document.getElementById('lang-toggle');
+    const enDiv    = document.querySelector('.lang-en');
+    const zhDiv    = document.querySelector('.lang-zh');
+    let lang = 'en';
+
+    function openModal() {
+      modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+    }
+
+    function toggleLang() {
+      lang = lang === 'en' ? 'zh' : 'en';
+      enDiv.classList.toggle('active', lang === 'en');
+      zhDiv.classList.toggle('active', lang === 'zh');
+      langBtn.textContent = lang === 'en' ? '中文' : 'Eng';
+    }
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    langBtn.addEventListener('click', toggleLang);
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeModal();
+    });
+  })();
+  </script>
 </body>
 </html>

@@ -300,6 +300,46 @@ function takeSnapshot() {
   setStatus(`Snapshot #${snapshots.length} captured`);
 }
 
+// ── Auto-find a valid camera position ────────────────────────────────────────
+function nextPosition() {
+  const DEG = THREE.MathUtils.radToDeg;
+  function rand(lo, hi) { return lo + Math.random() * (hi - lo); }
+
+  for (let attempt = 0; attempt < 400; attempt++) {
+    // Sample position in a hemisphere above the board
+    const x = rand(-0.28, 0.28);
+    const y = rand(0.08, 0.48);
+    const z = rand(0.05, 0.48);
+
+    // Aim at board center with a tiny random offset for variety
+    const target = new THREE.Vector3(rand(-0.04, 0.04), 0, rand(-0.04, 0.04));
+    virtualCam.position.set(x, y, z);
+    virtualCam.rotation.order = 'XYZ';
+    virtualCam.lookAt(target);
+
+    // Read back computed Euler angles, add small random roll
+    const rx = DEG(virtualCam.rotation.x) + rand(-4, 4);
+    const ry = DEG(virtualCam.rotation.y) + rand(-4, 4);
+    const rz = rand(-22, 22);
+
+    // Write into params (clamped to slider ranges)
+    params.camX = Math.max(-0.35, Math.min(0.35, +x.toFixed(3)));
+    params.camY = Math.max(0.04,  Math.min(0.55, +y.toFixed(3)));
+    params.camZ = Math.max(-0.35, Math.min(0.55, +z.toFixed(3)));
+    params.rotX = Math.max(-85, Math.min(10,  Math.round(rx)));
+    params.rotY = Math.max(-70, Math.min(70,  Math.round(ry)));
+    params.rotZ = Math.max(-40, Math.min(40,  Math.round(rz)));
+
+    syncCam();
+    if (allInFrame(projectCorners())) {
+      gui.controllersRecursive().forEach(c => c.updateDisplay());
+      setStatus(`New position — take snapshot #${snapshots.length + 1}`);
+      return;
+    }
+  }
+  setStatus('No valid position found — try again');
+}
+
 // ── Calibration — pure JS Zhang's method (synchronous, no WASM) ──────────────
 function calibrate() {
   if (snapshots.length < 3) { setStatus('Need at least 3 snapshots'); return; }
@@ -387,6 +427,7 @@ const simFolder = gui.addFolder('Simulation');
 simFolder.add(params, 'noise', 0, 5, 0.1).name('Noise σ (px)');
 
 const actFolder = gui.addFolder('Actions');
+actFolder.add({ fn: nextPosition }, 'fn').name('🎲 Next Position');
 actFolder.add({ fn: takeSnapshot }, 'fn').name('📸 Take Snapshot');
 actFolder.add({ fn: calibrate },    'fn').name('⚙️  Calibrate');
 actFolder.add({
