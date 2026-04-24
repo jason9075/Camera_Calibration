@@ -1,0 +1,56 @@
+
+## 🏛️ System Architecture
+To keep the project maintainable, separate the "Simulation Environment" from the "Calibration Engine."
+
+### 1. The Ground Truth (Three.js)
+* **Scene Setup:** Create a `World` containing a `Chessboard` (Group of planes or a custom texture) and two `PerspectiveCameras` (A and B).
+* **Camera Representations:** Use `CameraHelper` to visualize the frustum and a 3D model to represent the physical camera body.
+* **Data Extraction:** Use the `.project()` method to transform 3D corner coordinates into 2D screen space.
+    * *Tip:* Remember to map NDC coordinates $(-1 \text{ to } 1)$ to actual pixel dimensions $(0 \text{ to } W, 0 \text{ to } H)$.
+
+### 2. The Calibration Engine (OpenCV.js)
+* **Data Feeding:** Feed the extracted 2D pixel points and the known 3D object points into `cv.calibrateCamera`.
+* **WASM Integration:** Since you're on NixOS, ensure your dev environment handles the `opencv.js` WASM binary correctly (Vite’s `assetsInclude` or a simple script tag in `index.html`).
+
+---
+
+## 📋 Implementation Guidelines
+
+### I. Mathematical Alignment
+The biggest challenge is the difference in coordinate systems:
+* **Three.js:** Y-up, Right-handed.
+* **OpenCV:** Y-down, Z-forward (Optical axis).
+* **Conversion:** You must apply a rotation matrix to bridge the two. To get the focal length from Three.js $FOV$:
+    $$f_{px} = \frac{\text{height}}{2 \cdot \tan\left(\frac{FOV_{vertical} \cdot \pi}{360}\right)}$$
+
+### II. Simulation Realism
+To make the demo educational, avoid "perfect" math:
+1.  **Noise Injection:** Add a configurable Gaussian noise (e.g., $\sigma = 0.5$ px) to the 2D corner positions to simulate sensor noise and detection inaccuracy.
+2.  **Lens Distortion:** * Three.js doesn't natively support radial distortion. 
+    * To demo this, use a **Post-processing Shader** (EffectComposer) to warp the image. 
+    * The calibration should then attempt to "solve" these distortion coefficients ($k_1, k_2, p_1, p_2$).
+
+### III. Visualization of Errors
+* **Reprojection Rays:** Draw lines from the camera center through the "estimated" 2D points. The distance between the projected point and the actual point on the 3D board is your **Reprojection Error**.
+* **Extrinsic Comparison:** Display two sets of axes at the camera’s location—one for the "Actual Pose" (Three.js) and one for the "Estimated Pose" (OpenCV).
+* **Residual Map:** A small 2D overlay showing the error vectors for every corner.
+
+### IV. User Interaction (UI/UX)
+* **Dynamic Controls:** Use `lil-gui` to allow real-time manipulation of:
+    * Camera Intrinsics (FOV, Aspect Ratio).
+    * Camera Extrinsics (Position, Euler Angles).
+    * Chessboard Geometry (Square size, Grid dimensions).
+* **Capture System:** A "Snapshot" button to collect point sets from different angles, mimicking a real calibration session.
+
+---
+
+## 🛠️ Recommended Development Workflow
+
+### Key Milestones
+1.  **Phase 1:** Render a 3D world where you can move a camera and see a "Camera Feed" in a sub-canvas.
+2.  **Phase 2:** Extract 2D corner points and draw them as overlays on the sub-canvas.
+3.  **Phase 3:** Integrate `cv.calibrateCamera`. Start with 0 noise and see if the estimated $K$ matrix matches the Three.js projection matrix.
+4.  **Phase 4:** Add noise and distortion sliders. Implement the error visualization.
+
+---
+

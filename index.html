@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gfx-lab</title>
+
+  <!-- KaTeX -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body, {
+            delimiters: [
+              {left: '$$', right: '$$', display: true},
+              {left: '$', right: '$', display: false}
+            ],
+            macros: {
+              '\\R': '\\mathbb{R}',
+              '\\vec': '\\mathbf{#1}',
+              '\\mat': '\\mathbf{#1}'
+            }
+          });"></script>
+
+  <!-- Import Maps for Three.js (ESM) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    /* Nord colour palette */
+    :root {
+      --nord0:  #2E3440;
+      --nord1:  #3B4252;
+      --nord2:  #434C5E;
+      --nord3:  #4C566A;
+      --nord4:  #D8DEE9;
+      --nord5:  #E5E9F0;
+      --nord6:  #ECEFF4;
+      --nord7:  #8FBCBB;
+      --nord8:  #88C0D0;
+      --nord9:  #81A1C1;
+      --nord10: #5E81AC;
+      --nord11: #BF616A;
+      --nord12: #D08770;
+      --nord13: #EBCB8B;
+      --nord14: #A3BE8C;
+      --nord15: #B48EAD;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--nord0);
+      color: var(--nord4);
+      font-family: 'JetBrains Mono', monospace, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    canvas { display: block; }
+
+    #info {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      color: var(--nord8);
+      font-size: 0.85rem;
+    }
+
+  </style>
+</head>
+<body>
+  <!-- GitHub Ribbon：將 href 替換為你的 repo URL -->
+  <!-- 顏色可換：forkme_right_red_aa0000 / forkme_right_green_007200 / forkme_right_darkblue_121621 -->
+  <a href="https://github.com/YOUR_USERNAME/YOUR_REPO" target="_blank" rel="noopener">
+    <img loading="lazy" decoding="async" width="149" height="149"
+         style="position:fixed;top:0;right:0;border:0;z-index:9999;"
+         src="https://github.blog/wp-content/uploads/2008/12/forkme_right_darkblue_121621.png"
+         alt="Fork me on GitHub">
+  </a>
+
+  <div id="info">gfx-lab | Three.js + KaTeX + Nord</div>
+  <canvas id="canvas"></canvas>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
