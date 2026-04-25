@@ -1,5 +1,9 @@
 set shell := ["sh", "-c"]
 
+# 列出所有可用指令
+default:
+    @just --list
+
 # 啟動開發 server（no-cache, no-browser, port 8080）
 dev:
     @echo "\033[36m[Nord] Running gfx-lab dev server...\033[0m"
