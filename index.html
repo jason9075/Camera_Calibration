@@ -414,7 +414,11 @@
           $$\tilde{\mathbf{u}} \sim K\,[r_1 \mid r_2 \mid r_3 \mid t]\begin{pmatrix}X\\Y\\0\\1\end{pmatrix} = K\,[r_1 \mid r_2 \mid t]\begin{pmatrix}X\\Y\\1\end{pmatrix}$$
           <p>The $3 \times 4$ extrinsic collapses to a $3 \times 3$ matrix. Absorbing $K$ yields the <strong>homography</strong>:</p>
           $$\boxed{H = K\bigl[r_1 \mid r_2 \mid t\bigr]}$$
-          <p>Each captured view contributes one homography $H$ with <strong>8 degrees of freedom</strong>. At least 4 non-collinear corners per view are required.</p>
+          <p><strong>Why 8 degrees of freedom?</strong> $H$ is a $3 \times 3$ matrix — 9 entries in total. However, it lives in homogeneous coordinates: multiplying every entry by the same non-zero scalar $\lambda$ produces an <em>identical</em> mapping,</p>
+          $$\lambda H\,\tilde{\mathbf{X}} \;\sim\; H\,\tilde{\mathbf{X}}$$
+          <p>This scale ambiguity is arbitrary and carries no information, so it consumes one degree of freedom. Conventionally we remove it by fixing $h_{33} = 1$, leaving</p>
+          $$9 \;-\; \underbrace{1}_{\text{scale}} \;=\; \mathbf{8} \text{ free parameters.}$$
+          <p>Each point correspondence $(X_i, Y_i) \leftrightarrow (u_i, v_i)$ yields <strong>2 independent linear equations</strong> (one for $u$, one for $v$). Therefore $8 \div 2 = 4$ point pairs are the theoretical minimum — provided no three of them are collinear, which would make the system degenerate.</p>
 
           <h2>3. DLT — Computing H via Least Squares</h2>
           <p>For each corner correspondence $(X_i, Y_i) \leftrightarrow (u_i, v_i)$, the cross-product constraint $\tilde{\mathbf{u}} \times H\tilde{\mathbf{X}} = 0$ yields two linear equations:</p>
@@ -485,7 +489,11 @@
           $$\tilde{\mathbf{u}} \sim K\,[r_1 \mid r_2 \mid r_3 \mid t]\begin{pmatrix}X\\Y\\0\\1\end{pmatrix} = K\,[r_1 \mid r_2 \mid t]\begin{pmatrix}X\\Y\\1\end{pmatrix}$$
           <p>$3 \times 4$ 的外參矩陣因此退化為 $3 \times 3$。再乘上內參 $K$ 即得<strong>單應矩陣</strong>：</p>
           $$\boxed{H = K\bigl[r_1 \mid r_2 \mid t\bigr]}$$
-          <p>每個拍攝視角提供一個具有 <strong>8 個自由度</strong>的單應矩陣 $H$。每個視角至少需要 4 個不共線的角點才能求解。</p>
+          <p><strong>為何是 8 個自由度？</strong> $H$ 是 $3 \times 3$ 矩陣，共有 9 個元素。但它定義在齊次座標下：將所有元素同乘任意非零純量 $\lambda$，映射結果<em>完全相同</em>：</p>
+          $$\lambda H\,\tilde{\mathbf{X}} \;\sim\; H\,\tilde{\mathbf{X}}$$
+          <p>這個尺度不定性本身不含任何資訊，因此消耗了一個自由度。慣例上固定 $h_{33} = 1$ 來消除它，於是剩下</p>
+          $$9 \;-\; \underbrace{1}_{\text{尺度}} \;=\; \mathbf{8} \text{ 個自由參數。}$$
+          <p>每組角點對應 $(X_i, Y_i) \leftrightarrow (u_i, v_i)$ 提供 <strong>2 條獨立線性方程式</strong>（$u$ 一條、$v$ 一條）。因此理論上最少需要 $8 \div 2 = 4$ 組點對——前提是其中任意三點不共線，否則方程組退化，無法求得唯一解。</p>
 
           <h2>3. DLT — 最小二乘法計算單應矩陣</h2>
           <p>對每個角點對應 $(X_i, Y_i) \leftrightarrow (u_i, v_i)$，叉積約束 $\tilde{\mathbf{u}} \times H\tilde{\mathbf{X}} = 0$ 展開為兩條線性方程：</p>
