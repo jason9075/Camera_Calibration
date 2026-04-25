@@ -408,8 +408,12 @@
           <p>This simulation assumes <strong>square pixels</strong> ($f_x = f_y = f$) and a <strong>centred principal point</strong> ($c_x = W/2,\; c_y = H/2$), so there is only one unknown: the focal length $f$.</p>
 
           <h2>2. Homography — Board Plane to Image</h2>
-          <p>The calibration board lies entirely on $Z = 0$, so the third rotation column $r_3$ drops out and the full projection collapses to a $3 \times 3$ mapping:</p>
-          $$\tilde{\mathbf{u}} \sim H\,\tilde{\mathbf{X}}, \qquad H = K\bigl[r_1 \mid r_2 \mid t\bigr]$$
+          <p>Start from the full projection. The extrinsic matrix $[R \mid t]$ is $3 \times 4$, with $R = [r_1 \mid r_2 \mid r_3]$:</p>
+          $$\tilde{\mathbf{u}} \sim K\,[r_1 \mid r_2 \mid r_3 \mid t]\begin{pmatrix}X\\Y\\Z\\1\end{pmatrix}$$
+          <p>The calibration board lies entirely on the plane $Z = 0$, so every world point satisfies $Z = 0$. Substituting eliminates the $r_3 Z$ term entirely:</p>
+          $$\tilde{\mathbf{u}} \sim K\,[r_1 \mid r_2 \mid r_3 \mid t]\begin{pmatrix}X\\Y\\0\\1\end{pmatrix} = K\,[r_1 \mid r_2 \mid t]\begin{pmatrix}X\\Y\\1\end{pmatrix}$$
+          <p>The $3 \times 4$ extrinsic collapses to a $3 \times 3$ matrix. Absorbing $K$ yields the <strong>homography</strong>:</p>
+          $$\boxed{H = K\bigl[r_1 \mid r_2 \mid t\bigr]}$$
           <p>Each captured view contributes one homography $H$ with <strong>8 degrees of freedom</strong>. At least 4 non-collinear corners per view are required.</p>
 
           <h2>3. DLT — Computing H via Least Squares</h2>
@@ -440,6 +444,28 @@
           above $1.5\,\mathrm{px}$ → <strong style="color:var(--nord11)">Too large</strong>.
           With Gaussian noise $\sigma$, the theoretical minimum RMS approaches $\sigma$ as the number of views grows.</p>
 
+          <h2>7. Board Conventions — Unwritten Rules</h2>
+          <p><strong>Asymmetric grid (one odd, one even):</strong> Always use a grid where the two corner counts differ — e.g. $9 \times 6$ or $7 \times 8$, never $8 \times 8$. A symmetric board has $180°$ rotational symmetry, so the detector cannot distinguish the board's orientation and the recovered $R$ may have random axis flips.</p>
+
+          <p><strong>Object-space coordinate system</strong> (the frame passed to <code>calibrateCamera</code>):</p>
+          <ul style="margin:4px 0 10px 20px;line-height:2.1">
+            <li><strong>Origin $(0,0,0)$</strong> — top-left inner corner (first detected point, red dot in this demo).</li>
+            <li><strong>$X$-axis (red arrow)</strong> — points right, advancing along columns (long edge).</li>
+            <li><strong>$Y$-axis (green arrow)</strong> — points down, advancing along rows (short edge).</li>
+            <li><strong>$Z$-axis</strong> — by the right-hand rule, points <em>away from the camera</em> (into the board).</li>
+          </ul>
+
+          <p><strong>Row-major scan order:</strong> The object-point list walks columns first ($X$), then rows ($Y$), matching the detector output:</p>
+          $$\mathrm{idx} = r \cdot \mathrm{cols} + c, \qquad \mathbf{X}_{rc} = (c \cdot s,\; r \cdot s,\; 0)$$
+          <p>where $s$ is the physical square size (e.g. metres).</p>
+
+          <div class="note">
+            <strong>Senior tips —</strong>
+            (1) Use real physical units for $s$: the recovered $t$ then has metric meaning ($t_z = 0.5$ → camera is 50 cm from the board).
+            (2) Leave at least one square of white border (quiet zone) around the grid; missing contrast breaks corner detection at the edges.
+            (3) Never use a square grid ($N \times N$): a $90°$ rotation silently swaps $X$ and $Y$, destabilising pose estimates in SLAM or multi-camera rigs.
+          </div>
+
         </div><!-- .lang-en -->
 
         <!-- ═══ TRADITIONAL CHINESE ════════════════════════════════════════ -->
@@ -453,8 +479,12 @@
           <p>本系統假設<strong>方形像素</strong>（$f_x = f_y = f$）且<strong>主點置中</strong>（$c_x = W/2,\; c_y = H/2$），因此只剩一個未知數：焦距 $f$。</p>
 
           <h2>2. 單應矩陣 — 標定板平面到影像</h2>
-          <p>標定板完全位於 $Z = 0$ 平面，旋轉矩陣第三列 $r_3$ 因此消去，完整投影化簡為 $3 \times 3$ 的映射：</p>
-          $$\tilde{\mathbf{u}} \sim H\,\tilde{\mathbf{X}}, \qquad H = K\bigl[r_1 \mid r_2 \mid t\bigr]$$
+          <p>從完整投影公式出發。外參矩陣 $[R \mid t]$ 為 $3 \times 4$，其中 $R = [r_1 \mid r_2 \mid r_3]$：</p>
+          $$\tilde{\mathbf{u}} \sim K\,[r_1 \mid r_2 \mid r_3 \mid t]\begin{pmatrix}X\\Y\\Z\\1\end{pmatrix}$$
+          <p>標定板完全位於 $Z = 0$ 平面，所有世界座標點均滿足 $Z = 0$。代入後，$r_3 Z$ 項完全消去：</p>
+          $$\tilde{\mathbf{u}} \sim K\,[r_1 \mid r_2 \mid r_3 \mid t]\begin{pmatrix}X\\Y\\0\\1\end{pmatrix} = K\,[r_1 \mid r_2 \mid t]\begin{pmatrix}X\\Y\\1\end{pmatrix}$$
+          <p>$3 \times 4$ 的外參矩陣因此退化為 $3 \times 3$。再乘上內參 $K$ 即得<strong>單應矩陣</strong>：</p>
+          $$\boxed{H = K\bigl[r_1 \mid r_2 \mid t\bigr]}$$
           <p>每個拍攝視角提供一個具有 <strong>8 個自由度</strong>的單應矩陣 $H$。每個視角至少需要 4 個不共線的角點才能求解。</p>
 
           <h2>3. DLT — 最小二乘法計算單應矩陣</h2>
@@ -484,6 +514,28 @@
           $0.5$–$1.5\,\mathrm{px}$ → <strong style="color:var(--nord13)">可接受</strong>&nbsp;|&nbsp;
           超過 $1.5\,\mathrm{px}$ → <strong style="color:var(--nord11)">過大</strong>。
           在高斯噪聲 $\sigma$ 下，隨視角數增加，RMS 理論下限趨近於 $\sigma$。</p>
+
+          <h2>7. 標定板慣例 — 潛規則</h2>
+          <p><strong>非對稱格子（一奇一偶）：</strong>角點數必須一奇一偶，例如 $9 \times 6$ 或 $7 \times 8$，絕不能用 $8 \times 8$。對稱板具有 $180°$ 旋轉對稱性，偵測器無法分辨方向，導致 $R$ 矩陣的座標軸隨機翻轉。</p>
+
+          <p><strong>物體空間座標系</strong>（傳入 <code>calibrateCamera</code> 的三維座標）：</p>
+          <ul style="margin:4px 0 10px 20px;line-height:2.1">
+            <li><strong>原點 $(0,0,0)$</strong> — 左上角第一個內角點（本示例中紅色圓點處）。</li>
+            <li><strong>$X$ 軸（紅色箭頭）</strong> — 向右，沿欄方向增加（長邊）。</li>
+            <li><strong>$Y$ 軸（綠色箭頭）</strong> — 向下，沿列方向增加（短邊）。</li>
+            <li><strong>$Z$ 軸</strong> — 依右手定則，指向板面背後（遠離相機）。</li>
+          </ul>
+
+          <p><strong>行優先掃描順序：</strong>物體點清單先走 $X$（欄），再走 $Y$（列），與偵測器輸出順序一致：</p>
+          $$\mathrm{idx} = r \cdot \mathrm{cols} + c, \qquad \mathbf{X}_{rc} = (c \cdot s,\; r \cdot s,\; 0)$$
+          <p>其中 $s$ 為棋盤格的真實物理邊長（建議使用公尺）。</p>
+
+          <div class="note">
+            <strong>實務重點 —</strong>
+            (1) $s$ 使用真實物理單位，解出的平移向量 $t$ 才有距離意義（$t_z = 0.5$ 代表相機距板面 50 cm）。
+            (2) 棋盤格四周必須留至少一格白邊（quiet zone），否則邊緣角點因缺乏對比度而偵測失敗。
+            (3) 絕對不要用正方形格子（$N \times N$）：旋轉 $90°$ 會讓 $X$ 與 $Y$ 軸悄悄互換，導致 SLAM 或多相機系統的姿態估計不穩定。
+          </div>
 
         </div><!-- .lang-zh -->
 

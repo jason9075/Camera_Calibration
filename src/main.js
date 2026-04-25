@@ -54,8 +54,6 @@ const grid = new THREE.GridHelper(1, 30, 0x434C5E, 0x3B4252);
 grid.position.y = -0.001;
 scene.add(grid);
 
-// Axes helper
-scene.add(new THREE.AxesHelper(0.05));
 
 // ── Chessboard ────────────────────────────────────────────────────────────────
 const boardGroup = new THREE.Group();
@@ -114,6 +112,50 @@ const cornerDots = corners3D.map(p => {
   scene.add(d);
   return d;
 });
+
+// ── Board axis indicators at board center (X→col red, Y→row green, Z→normal blue)
+const boardAxisGroup = new THREE.Group();
+const boardCenter = new THREE.Vector3(0, 0.001, 0);
+const AXIS_X_LEN = BOARD_W / 2;
+const AXIS_Y_LEN = BOARD_D / 2;
+const AXIS_Z_LEN = SQUARE * 3;
+
+boardAxisGroup.add(new THREE.ArrowHelper(
+  new THREE.Vector3(1, 0, 0), boardCenter, AXIS_X_LEN,
+  0xBF616A, SQUARE * 0.65, SQUARE * 0.32
+));
+boardAxisGroup.add(new THREE.ArrowHelper(
+  new THREE.Vector3(0, 0, 1), boardCenter, AXIS_Y_LEN,
+  0xA3BE8C, SQUARE * 0.55, SQUARE * 0.28
+));
+boardAxisGroup.add(new THREE.ArrowHelper(
+  new THREE.Vector3(0, 1, 0), boardCenter, AXIS_Z_LEN,
+  0x5E81AC, SQUARE * 0.5, SQUARE * 0.25
+));
+
+function makeAxisLabel(text, color) {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const g = c.getContext('2d');
+  g.font = 'bold 46px sans-serif';
+  g.fillStyle = color;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 32, 32);
+  const mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.022, 0.022, 1);
+  return sprite;
+}
+
+const xLabel = makeAxisLabel('X', '#BF616A');
+xLabel.position.set(AXIS_X_LEN + SQUARE * 0.5, 0.008, 0);
+const yLabel = makeAxisLabel('Y', '#A3BE8C');
+yLabel.position.set(0, 0.008, AXIS_Y_LEN + SQUARE * 0.5);
+const zLabel = makeAxisLabel('Z', '#5E81AC');
+zLabel.position.set(0, AXIS_Z_LEN + SQUARE * 0.4, 0);
+boardAxisGroup.add(xLabel, yLabel, zLabel);
+scene.add(boardAxisGroup);
 
 // ── Virtual camera (the calibration camera being simulated) ───────────────────
 const virtualCam = new THREE.PerspectiveCamera(60, FEED_W / FEED_H, 0.005, 50);
@@ -256,15 +298,17 @@ function setStatus(msg) {
 }
 
 // ── Virtual camera sync ───────────────────────────────────────────────────────
+// camX/Y/Z follow board convention: X=col, Y=row/depth, Z=normal/height
+// Three.js world mapping: camX→worldX, camY→worldZ, camZ→worldY
 const params = {
-  camX: 0.00, camY: 0.18, camZ: 0.28,
+  camX: 0.00, camY: 0.28, camZ: 0.18,
   rotX: -32,  rotY: 0,   rotZ: 0,
   fov: 60,
   noise: 0.5,
 };
 
 function syncCam() {
-  virtualCam.position.set(params.camX, params.camY, params.camZ);
+  virtualCam.position.set(params.camX, params.camZ, params.camY);
   virtualCam.rotation.order = 'XYZ';
   virtualCam.rotation.set(
     THREE.MathUtils.degToRad(params.rotX),
@@ -324,9 +368,10 @@ function nextPosition() {
     const rz = rand(-22, 22);
 
     // Write into params (clamped to slider ranges)
+    // y = Three.js world Y (height) → board Z; z = Three.js world Z (depth) → board Y
     params.camX = Math.max(-0.35, Math.min(0.35, +x.toFixed(3)));
-    params.camY = Math.max(0.04,  Math.min(0.55, +y.toFixed(3)));
-    params.camZ = Math.max(-0.35, Math.min(0.55, +z.toFixed(3)));
+    params.camY = Math.max(-0.35, Math.min(0.55, +z.toFixed(3)));
+    params.camZ = Math.max(0.04,  Math.min(0.55, +y.toFixed(3)));
     params.rotX = Math.max(-85, Math.min(10,  Math.round(rx)));
     params.rotY = Math.max(-70, Math.min(70,  Math.round(ry)));
     params.rotZ = Math.max(-40, Math.min(40,  Math.round(rz)));
@@ -409,8 +454,8 @@ gui.domElement.style.position = 'relative';
 
 const extFolder = gui.addFolder('Extrinsics');
 extFolder.add(params, 'camX', -0.35, 0.35, 0.005).name('X (m)').onChange(syncCam);
-extFolder.add(params, 'camY', 0.04,  0.55, 0.005).name('Y (m)').onChange(syncCam);
-extFolder.add(params, 'camZ', -0.35, 0.55, 0.005).name('Z (m)').onChange(syncCam);
+extFolder.add(params, 'camY', -0.35, 0.55, 0.005).name('Y (m) depth').onChange(syncCam);
+extFolder.add(params, 'camZ', 0.04,  0.55, 0.005).name('Z (m) height').onChange(syncCam);
 extFolder.add(params, 'rotX', -85,   10,   1).name('Rot X°').onChange(syncCam);
 extFolder.add(params, 'rotY', -70,   70,   1).name('Rot Y°').onChange(syncCam);
 extFolder.add(params, 'rotZ', -40,   40,   1).name('Rot Z°').onChange(syncCam);
@@ -470,13 +515,15 @@ function animate(now = 0) {
     lastFeedMs = now;
     feedDirty = false;
 
-    camHelper.visible = false;
-    bodyMesh.visible  = false;
-    lensMesh.visible  = false;
+    camHelper.visible        = false;
+    bodyMesh.visible         = false;
+    lensMesh.visible         = false;
+    boardAxisGroup.visible   = false;
     feedRenderer.render(scene, virtualCam);
-    camHelper.visible = true;
-    bodyMesh.visible  = true;
-    lensMesh.visible  = true;
+    camHelper.visible        = true;
+    bodyMesh.visible         = true;
+    lensMesh.visible         = true;
+    boardAxisGroup.visible   = true;
 
     if (liveOverlay) drawLiveCorners(projectCorners());
   }
