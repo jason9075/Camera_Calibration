@@ -298,17 +298,15 @@ function setStatus(msg) {
 }
 
 // ── Virtual camera sync ───────────────────────────────────────────────────────
-// camX/Y/Z follow board convention: X=col, Y=row/depth, Z=normal/height
-// Three.js world mapping: camX→worldX, camY→worldZ, camZ→worldY
 const params = {
-  camX: 0.00, camY: 0.28, camZ: 0.18,
+  camX: 0.00, camY: 0.18, camZ: 0.28,
   rotX: -32,  rotY: 0,   rotZ: 0,
   fov: 60,
   noise: 0.5,
 };
 
 function syncCam() {
-  virtualCam.position.set(params.camX, params.camZ, params.camY);
+  virtualCam.position.set(params.camX, params.camY, params.camZ);
   virtualCam.rotation.order = 'XYZ';
   virtualCam.rotation.set(
     THREE.MathUtils.degToRad(params.rotX),
@@ -368,10 +366,9 @@ function nextPosition() {
     const rz = rand(-22, 22);
 
     // Write into params (clamped to slider ranges)
-    // y = Three.js world Y (height) → board Z; z = Three.js world Z (depth) → board Y
     params.camX = Math.max(-0.35, Math.min(0.35, +x.toFixed(3)));
-    params.camY = Math.max(-0.35, Math.min(0.55, +z.toFixed(3)));
-    params.camZ = Math.max(0.04,  Math.min(0.55, +y.toFixed(3)));
+    params.camY = Math.max(0.04,  Math.min(0.55, +y.toFixed(3)));
+    params.camZ = Math.max(-0.35, Math.min(0.55, +z.toFixed(3)));
     params.rotX = Math.max(-85, Math.min(10,  Math.round(rx)));
     params.rotY = Math.max(-70, Math.min(70,  Math.round(ry)));
     params.rotZ = Math.max(-40, Math.min(40,  Math.round(rz)));
@@ -454,8 +451,8 @@ gui.domElement.style.position = 'relative';
 
 const extFolder = gui.addFolder('Extrinsics');
 extFolder.add(params, 'camX', -0.35, 0.35, 0.005).name('X (m)').onChange(syncCam);
-extFolder.add(params, 'camY', -0.35, 0.55, 0.005).name('Y (m) depth').onChange(syncCam);
-extFolder.add(params, 'camZ', 0.04,  0.55, 0.005).name('Z (m) height').onChange(syncCam);
+extFolder.add(params, 'camY', 0.04,  0.55, 0.005).name('Y (m) height').onChange(syncCam);
+extFolder.add(params, 'camZ', -0.35, 0.55, 0.005).name('Z (m) depth').onChange(syncCam);
 extFolder.add(params, 'rotX', -85,   10,   1).name('Rot X°').onChange(syncCam);
 extFolder.add(params, 'rotY', -70,   70,   1).name('Rot Y°').onChange(syncCam);
 extFolder.add(params, 'rotZ', -40,   40,   1).name('Rot Z°').onChange(syncCam);
